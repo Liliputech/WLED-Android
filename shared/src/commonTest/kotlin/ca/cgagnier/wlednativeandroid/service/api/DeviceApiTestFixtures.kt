@@ -40,8 +40,25 @@ internal val SAMPLE_INFO_JSON = """
     }
 """.trimIndent()
 
-/** Minimal json/state payload. */
-internal const val SAMPLE_STATE_JSON = """{"on":true,"bri":195,"transition":7,"ps":-1,"pl":-1}"""
+/** json/state payload with nested nightlight and segment data (trimmed from WLED 16.0.1). */
+internal val SAMPLE_STATE_JSON = """
+    {
+        "on": true,
+        "bri": 195,
+        "transition": 7,
+        "ps": -1,
+        "pl": -1,
+        "nl": { "on": false, "dur": 60, "mode": 1, "tbri": 0, "rem": -1 },
+        "mainseg": 0,
+        "seg": [
+            {
+                "id": 0, "start": 0, "stop": 88, "len": 88, "on": true, "bri": 255,
+                "col": [[0, 17, 255, 0], [144, 79, 255, 0], [0, 0, 0, 0]],
+                "fx": 107, "sx": 20, "ix": 144, "pal": 3
+            }
+        ]
+    }
+""".trimIndent()
 
 /**
  * Records every request sent through a [MockEngine] and replies with [handler].
