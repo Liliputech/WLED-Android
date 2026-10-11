@@ -124,6 +124,16 @@ class KtorDeviceApiTest {
     }
 
     @Test
+    fun postJsonDecodesNestedNightlightAndSegments() = runTest {
+        val state = respondingWith(SAMPLE_STATE_JSON).api().postJson(JsonPost(isOn = true)).body
+
+        assertEquals(60, state?.nightlight?.duration)
+        val segment = state?.segment?.single()
+        assertEquals(107, segment?.effect)
+        assertEquals(listOf(listOf(0, 17, 255, 0), listOf(144, 79, 255, 0), listOf(0, 0, 0, 0)), segment?.colors)
+    }
+
+    @Test
     fun postJsonReturnsErrorBodyOnHttpError() = runTest {
         val engine = respondingWith("Bad Request", HttpStatusCode.BadRequest, ContentType.Text.Plain)
 
