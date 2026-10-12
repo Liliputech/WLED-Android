@@ -14,7 +14,7 @@ fun DeviceApiFactory.Companion.createHttpClient(okHttpClient: OkHttpClient, json
         engine {
             preconfigured = okHttpClient
         }
-        installDeviceApiDefaults(json)
+        installDeviceHttpClientDefaults(json)
     }
 
 operator fun DeviceApiFactory.Companion.invoke(

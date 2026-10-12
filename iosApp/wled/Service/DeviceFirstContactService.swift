@@ -14,41 +14,38 @@ import OSLog
 actor DeviceFirstContactService {
 
     private let repository: DeviceRepository
-    private let deviceApiFactory: DeviceApiFactory
+    private let deviceApiClient: DeviceApiClient
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "ca.cgagnier.wled-native",
         category: "DeviceFirstContactService"
     )
 
-    enum ServiceError: LocalizedError {
+    /// Failures of the first contact. Descriptions are meant for logs only; callers show their own
+    /// user-facing message.
+    enum ServiceError: Error, CustomStringConvertible {
         case missingMacAddress
         case httpError(statusCode: Int)
-        case networkError(Error)
+        /// The request could not complete or its response could not be decoded.
+        case requestFailed(any Error)
 
-        var errorDescription: String? {
+        var description: String {
             switch self {
-            case .missingMacAddress:
-                return String(localized: "The device did not report a valid MAC address.", comment: "Missing MAC error")
-            case .httpError(let statusCode):
-                return String(
-                    localized: "The device responded with HTTP error \(statusCode).",
-                    comment: "Error shown when a device answers with a non-success HTTP status code"
-                )
-            case .networkError(let error):
-                return String(localized: "Network error: \(error.localizedDescription)")
+            case .missingMacAddress: "Device did not report a MAC address"
+            case .httpError(let statusCode): "Device responded with HTTP \(statusCode)"
+            case .requestFailed(let error): "Request failed: \(error)"
             }
         }
     }
 
     /// - Parameters:
     ///   - repository: The Room device repository.
-    ///   - deviceApiFactory: Creates the shared Kotlin `DeviceApi` for a device address.
+    ///   - deviceApiClient: Creates the shared Kotlin `DeviceApi` for a device address.
     init(
         repository: DeviceRepository = AppDatabase.shared.deviceRepository,
-        deviceApiFactory: DeviceApiFactory = .shared
+        deviceApiClient: DeviceApiClient = .shared
     ) {
         self.repository = repository
-        self.deviceApiFactory = deviceApiFactory
+        self.deviceApiClient = deviceApiClient
     }
 
     // MARK: - Public API
@@ -125,14 +122,14 @@ actor DeviceFirstContactService {
     private func fetchDeviceInfo(address: String) async throws -> Shared.Info {
         let response: ApiResponse<Shared.Info>
         do {
-            response = try await deviceApiFactory.create(address: address).getInfo()
-        } catch is CancellationError {
-            throw CancellationError()
+            response = try await deviceApiClient.create(address: address).getInfo()
+        } catch let error as CancellationError {
+            throw error
         } catch {
-            throw ServiceError.networkError(error)
+            throw ServiceError.requestFailed(error)
         }
 
-        guard let info = response.body else {
+        guard response.isSuccessful, let info = response.body else {
             logger.error("Device at \(address) responded with HTTP \(response.code)")
             throw ServiceError.httpError(statusCode: Int(response.code))
         }

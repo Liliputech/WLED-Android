@@ -12,7 +12,7 @@ import kotlin.time.Duration.Companion.seconds
  * Installs the plugins every WLED device [io.ktor.client.HttpClient] needs, independently of the
  * platform engine (OkHttp on Android, Darwin on iOS).
  */
-fun HttpClientConfig<*>.installDeviceApiDefaults(json: Json = defaultJson) {
+fun HttpClientConfig<*>.installDeviceHttpClientDefaults(json: Json = defaultJson) {
     install(ContentNegotiation) {
         json(json)
     }

@@ -7,9 +7,11 @@ import Shared
 /// and the Ktor Darwin engine, with HTTP responses served by `StubURLProtocol`.
 struct DeviceFirstContactServiceTests {
 
-    private static let factory = DeviceApiFactory.companion.create { configuration in
-        configuration.protocolClasses = [StubURLProtocol.self]
-    }
+    private static let client = DeviceApiClient(
+        factory: DeviceApiFactory.companion.create { configuration in
+            configuration.protocolClasses = [StubURLProtocol.self]
+        }
+    )
 
     /// Unique per test so stubs never collide when tests run in parallel.
     let host = "wled-\(UUID().uuidString.lowercased()).test"
@@ -17,7 +19,7 @@ struct DeviceFirstContactServiceTests {
     var repository: DeviceRepository { database.deviceRepository }
 
     private func makeService() -> DeviceFirstContactService {
-        DeviceFirstContactService(repository: repository, deviceApiFactory: Self.factory)
+        DeviceFirstContactService(repository: repository, deviceApiClient: Self.client)
     }
 
     private func stubInfo(name: String = "WLED Office", mac: String? = "aabbccddeeff") {
@@ -28,6 +30,13 @@ struct DeviceFirstContactServiceTests {
 
     private func insertDevice(mac: String = "aabbccddeeff", address: String, name: String = "WLED Office") async throws {
         try await repository.insert(device: Device(macAddress: mac, address: address, originalName: name, lastSeen: 0))
+    }
+
+    /// Runs `fetchAndUpsertDevice` against the stubbed host and returns the `ServiceError` it threw.
+    private func fetchError() async -> DeviceFirstContactService.ServiceError? {
+        await #expect(throws: DeviceFirstContactService.ServiceError.self) {
+            try await makeService().fetchAndUpsertDevice(rawAddress: host)
+        }
     }
 
     // MARK: - fetchAndUpsertDevice
@@ -89,61 +98,47 @@ struct DeviceFirstContactServiceTests {
         #expect(stored?.originalName == "New Name")
     }
 
-    @Test func fetchAndUpsertThrowsWhenMacAddressIsMissing() async throws {
+    @Test func fetchAndUpsertThrowsWhenMacAddressIsMissing() async {
         stubInfo(mac: nil)
 
-        await #expect(throws: DeviceFirstContactService.ServiceError.self) {
-            try await makeService().fetchAndUpsertDevice(rawAddress: host)
-        }
+        #expect(await fetchError()?.kind == .missingMacAddress)
     }
 
-    @Test func fetchAndUpsertThrowsWhenMacAddressIsEmpty() async throws {
+    @Test func fetchAndUpsertThrowsWhenMacAddressIsEmpty() async {
         stubInfo(mac: "")
 
-        await #expect(throws: DeviceFirstContactService.ServiceError.self) {
-            try await makeService().fetchAndUpsertDevice(rawAddress: host)
-        }
+        #expect(await fetchError()?.kind == .missingMacAddress)
     }
 
-    @Test func fetchAndUpsertThrowsHttpErrorOnNonSuccessStatus() async throws {
+    @Test func fetchAndUpsertThrowsHttpErrorOnNonSuccessStatus() async {
         StubURLProtocol.register(.http(statusCode: 500, body: "Oops", contentType: "text/plain"), for: host)
 
-        let error = await #expect(throws: DeviceFirstContactService.ServiceError.self) {
-            try await makeService().fetchAndUpsertDevice(rawAddress: host)
-        }
-
-        guard case .httpError(let statusCode) = error else {
-            Issue.record("Expected httpError, got \(String(describing: error))")
-            return
-        }
-        #expect(statusCode == 500)
+        #expect(await fetchError()?.kind == .httpError(500))
     }
 
     /// Verifies Kotlin exceptions surface as Swift errors instead of crashing (`@Throws` on `DeviceApi`).
-    @Test func fetchAndUpsertThrowsNetworkErrorWhenDeviceIsUnreachable() async throws {
+    @Test func fetchAndUpsertThrowsRequestFailedWhenDeviceIsUnreachable() async {
         StubURLProtocol.register(.failure(.cannotConnectToHost), for: host)
 
-        let error = await #expect(throws: DeviceFirstContactService.ServiceError.self) {
-            try await makeService().fetchAndUpsertDevice(rawAddress: host)
-        }
-
-        guard case .networkError = error else {
-            Issue.record("Expected networkError, got \(String(describing: error))")
-            return
-        }
+        #expect(await fetchError()?.kind == .requestFailed)
     }
 
-    @Test func fetchAndUpsertThrowsNetworkErrorOnMalformedJson() async throws {
+    @Test func fetchAndUpsertThrowsRequestFailedOnMalformedJson() async {
         StubURLProtocol.register(.http(statusCode: 200, body: "{ not json"), for: host)
 
-        let error = await #expect(throws: DeviceFirstContactService.ServiceError.self) {
-            try await makeService().fetchAndUpsertDevice(rawAddress: host)
-        }
+        #expect(await fetchError()?.kind == .requestFailed)
+    }
 
-        guard case .networkError = error else {
-            Issue.record("Expected networkError, got \(String(describing: error))")
-            return
-        }
+    /// Verifies Swift task cancellation reaches the Kotlin coroutine and comes back as `CancellationError`.
+    @Test func fetchAndUpsertPropagatesCancellation() async {
+        StubURLProtocol.register(.never, for: host)
+        let service = makeService()
+        let host = host
+
+        let task = Task { try await service.fetchAndUpsertDevice(rawAddress: host) }
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) { try await task.value }
     }
 
     @Test func fetchAndUpsertDoesNotStoreDeviceOnFailure() async throws {
@@ -185,5 +180,22 @@ struct DeviceFirstContactServiceTests {
         _ = await makeService().tryUpdateAddress(macAddress: "aabbccddeeff", address: host)
 
         #expect(StubURLProtocol.requests(for: host).isEmpty)
+    }
+}
+
+/// Case of a `ServiceError` without its associated `Error`, so tests can compare errors with `==`.
+private extension DeviceFirstContactService.ServiceError {
+    enum Kind: Equatable {
+        case missingMacAddress
+        case httpError(Int)
+        case requestFailed
+    }
+
+    var kind: Kind {
+        switch self {
+        case .missingMacAddress: .missingMacAddress
+        case .httpError(let statusCode): .httpError(statusCode)
+        case .requestFailed: .requestFailed
+        }
     }
 }

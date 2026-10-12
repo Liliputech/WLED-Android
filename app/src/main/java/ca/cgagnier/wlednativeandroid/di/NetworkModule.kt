@@ -24,7 +24,6 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val DEFAULT_TIMEOUT_SECONDS = 30L
     private const val CACHE_SIZE_BYTES = 20 * 1024 * 1024L // 20MB
 
     @Provides
@@ -49,10 +48,10 @@ object NetworkModule {
         }
         return OkHttpClient.Builder()
             .dispatcher(dispatcher)
-            .connectTimeout(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .writeTimeout(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .pingInterval(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .connectTimeout(DeviceApiFactory.DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(DeviceApiFactory.DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(DeviceApiFactory.DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .pingInterval(DeviceApiFactory.DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .cache(Cache(appContext.cacheDir, CACHE_SIZE_BYTES))
             .build()
     }

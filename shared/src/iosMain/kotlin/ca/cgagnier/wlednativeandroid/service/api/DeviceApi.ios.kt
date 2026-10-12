@@ -7,9 +7,6 @@ import kotlinx.serialization.json.Json
 import platform.Foundation.NSURLRequestReloadIgnoringLocalAndRemoteCacheData
 import platform.Foundation.NSURLSessionConfiguration
 
-/** Connect and socket timeout for device requests, aligned with the Android OkHttp client. */
-const val DEFAULT_IOS_TIMEOUT_SECONDS = 30L
-
 /**
  * Creates the [HttpClient] used to talk to WLED devices on iOS, backed by the Ktor Darwin engine
  * (`NSURLSession`).
@@ -18,29 +15,34 @@ const val DEFAULT_IOS_TIMEOUT_SECONDS = 30L
  * responses would hide address or name changes.
  *
  * @param configureSession Extra configuration applied to the underlying `NSURLSessionConfiguration`
- * after the defaults. Mainly a test seam, e.g. to register a stub `URLProtocol`.
+ * after the defaults.
  */
-fun DeviceApiFactory.Companion.createHttpClient(
+internal fun DeviceApiFactory.Companion.createHttpClient(
     json: Json = defaultJson,
-    timeoutSeconds: Long = DEFAULT_IOS_TIMEOUT_SECONDS,
+    timeoutSeconds: Long = DeviceApiFactory.DEFAULT_TIMEOUT_SECONDS,
     configureSession: (NSURLSessionConfiguration) -> Unit = {},
-): HttpClient = HttpClient(Darwin) {
-    engine {
-        configureSession {
-            requestCachePolicy = NSURLRequestReloadIgnoringLocalAndRemoteCacheData
-            configureSession(this)
+): HttpClient {
+    // Captured under another name: inside `engine { configureSession { } }` the name resolves to the
+    // Darwin engine config's own `configureSession` member instead of this parameter.
+    val onConfigureSession = configureSession
+    return HttpClient(Darwin) {
+        engine {
+            configureSession {
+                requestCachePolicy = NSURLRequestReloadIgnoringLocalAndRemoteCacheData
+                onConfigureSession(this)
+            }
         }
+        install(HttpTimeout) {
+            // The Darwin engine only honours the socket timeout, applied as the NSURLRequest
+            // timeoutInterval (an idle timeout); it has no separate connect timeout.
+            socketTimeoutMillis = timeoutSeconds * DeviceApiFactory.MILLIS_PER_SECOND
+        }
+        installDeviceHttpClientDefaults(json)
     }
-    install(HttpTimeout) {
-        val timeoutMillis = timeoutSeconds * DeviceApiFactory.MILLIS_PER_SECOND
-        connectTimeoutMillis = timeoutMillis
-        socketTimeoutMillis = timeoutMillis
-    }
-    installDeviceApiDefaults(json)
 }
 
 /**
- * Creates a [DeviceApiFactory] backed by the Darwin engine with the default configuration.
+ * Creates the production [DeviceApiFactory] backed by the Darwin engine.
  *
  * Callers should create one instance and share it so all requests reuse the same `NSURLSession`.
  */
@@ -48,9 +50,8 @@ fun DeviceApiFactory.Companion.create(): DeviceApiFactory = DeviceApiFactory(cre
 
 /**
  * Creates a [DeviceApiFactory] backed by the Darwin engine, applying [configureSession] to the
- * underlying `NSURLSessionConfiguration`.
- *
- * Separate from the no-argument overload because Kotlin default arguments are not visible from Swift.
+ * underlying `NSURLSessionConfiguration` after the defaults, e.g. to register a stub `URLProtocol`
+ * in tests.
  */
 fun DeviceApiFactory.Companion.create(configureSession: (NSURLSessionConfiguration) -> Unit): DeviceApiFactory =
     DeviceApiFactory(createHttpClient(configureSession = configureSession))

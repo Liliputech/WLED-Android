@@ -9,6 +9,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     enum Stub {
         case http(statusCode: Int, body: String, contentType: String = "application/json")
         case failure(URLError.Code)
+        /// Never answers, leaving the request pending until it is cancelled.
+        case never
     }
 
     private static let lock = NSLock()
@@ -17,13 +19,6 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     static func register(_ stub: Stub, for host: String) {
         lock.withLock { stubs[host] = stub }
-    }
-
-    static func unregister(host: String) {
-        lock.withLock {
-            stubs[host] = nil
-            recordedRequests[host] = nil
-        }
     }
 
     static func requests(for host: String) -> [URLRequest] {
@@ -63,6 +58,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocolDidFinishLoading(self)
         case let .failure(code):
             client?.urlProtocol(self, didFailWithError: URLError(code))
+        case .never:
+            break
         }
     }
 

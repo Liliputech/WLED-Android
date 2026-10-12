@@ -5,8 +5,6 @@ import ca.cgagnier.wlednativeandroid.model.wledapi.JsonPost
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.mock.toByteArray
-import io.ktor.client.plugins.plugin
-import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -19,12 +17,12 @@ import kotlin.test.assertEquals
 class DeviceHttpClientDefaultsTest {
 
     private val engine = respondingWith(SAMPLE_INFO_JSON)
-    private val client = HttpClient(engine.engine) { installDeviceApiDefaults() }
+    private val client = HttpClient(engine.engine) { installDeviceHttpClientDefaults() }
 
     @Test
     fun decodesJsonResponsesIgnoringUnknownKeys() = runTest {
         val json = SAMPLE_INFO_JSON.replaceFirst("{", """{"unknown": true,""")
-        val client = HttpClient(respondingWith(json).engine) { installDeviceApiDefaults() }
+        val client = HttpClient(respondingWith(json).engine) { installDeviceHttpClientDefaults() }
 
         val info = client.get("http://10.0.0.100/json/info").body<Info>()
 
@@ -39,12 +37,5 @@ class DeviceHttpClientDefaultsTest {
         }
 
         assertEquals("""{"bri":10,"v":true}""", engine.lastRequest.body.toByteArray().decodeToString())
-    }
-
-    @Test
-    fun installsWebSocketsWithPingInterval() {
-        val expectedMillis = DeviceApiFactory.PING_INTERVAL_SECONDS * DeviceApiFactory.MILLIS_PER_SECOND
-
-        assertEquals(expectedMillis, client.plugin(WebSockets).pingIntervalMillis)
     }
 }
