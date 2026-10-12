@@ -14,35 +14,38 @@ import OSLog
 actor DeviceFirstContactService {
 
     private let repository: DeviceRepository
-    private let urlSession: URLSession
+    private let deviceApiClient: DeviceApiClient
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "ca.cgagnier.wled-native",
         category: "DeviceFirstContactService"
     )
 
-    enum ServiceError: LocalizedError {
-        case invalidURL
+    /// Failures of the first contact. Descriptions are meant for logs only; callers show their own
+    /// user-facing message.
+    enum ServiceError: Error, CustomStringConvertible {
         case missingMacAddress
-        case networkError(Error)
+        case httpError(statusCode: Int)
+        /// The request could not complete or its response could not be decoded.
+        case requestFailed(any Error)
 
-        var errorDescription: String? {
+        var description: String {
             switch self {
-            case .invalidURL:
-                return String(localized: "The device address is invalid.", comment: "Invalid URL error")
-            case .missingMacAddress:
-                return String(localized: "The device did not report a valid MAC address.", comment: "Missing MAC error")
-            case .networkError(let error):
-                return String(localized: "Network error: \(error.localizedDescription)")
+            case .missingMacAddress: "Device did not report a MAC address"
+            case .httpError(let statusCode): "Device responded with HTTP \(statusCode)"
+            case .requestFailed(let error): "Request failed: \(error)"
             }
         }
     }
 
     /// - Parameters:
     ///   - repository: The Room device repository.
-    ///   - urlSession: Injected session for testability (defaults to .shared).
-    init(repository: DeviceRepository = AppDatabase.shared.deviceRepository, urlSession: URLSession = .shared) {
+    ///   - deviceApiClient: Creates the shared Kotlin `DeviceApi` for a device address.
+    init(
+        repository: DeviceRepository = AppDatabase.shared.deviceRepository,
+        deviceApiClient: DeviceApiClient = .shared
+    ) {
         self.repository = repository
-        self.urlSession = urlSession
+        self.deviceApiClient = deviceApiClient
     }
 
     // MARK: - Public API
@@ -59,7 +62,7 @@ actor DeviceFirstContactService {
         logger.debug("Initiating contact with: \(cleanAddress)")
         let info = try await fetchDeviceInfo(address: cleanAddress)
 
-        guard let macAddress = info.mac, !macAddress.isEmpty else {
+        guard let macAddress = info.macAddress, !macAddress.isEmpty else {
             logger.error("Could not retrieve MAC address for device at \(cleanAddress)")
             throw ServiceError.missingMacAddress
         }
@@ -113,25 +116,24 @@ actor DeviceFirstContactService {
         return result
     }
 
-    /// Fetches device information from the specified address.
-    private func fetchDeviceInfo(address: String) async throws -> Info {
-        // Construct URL, ensuring http scheme and json/info path
-        let urlString = "http://\(address)/json/info"
-
-        guard let url = URL(string: urlString) else {
-            throw ServiceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 10
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-
+    /// Fetches device information from the specified address through the shared Kotlin `DeviceApi`.
+    ///
+    /// `Shared.Info` is spelled out because the app still has its own Swift `Info` model for websockets.
+    private func fetchDeviceInfo(address: String) async throws -> Shared.Info {
+        let response: ApiResponse<Shared.Info>
         do {
-            let (data, _) = try await urlSession.data(for: request)
-            return try JSONDecoder().decode(Info.self, from: data)
+            response = try await deviceApiClient.create(address: address).getInfo()
+        } catch let error as CancellationError {
+            throw error
         } catch {
-            throw ServiceError.networkError(error)
+            throw ServiceError.requestFailed(error)
         }
+
+        guard response.isSuccessful, let info = response.body else {
+            logger.error("Device at \(address) responded with HTTP \(response.code)")
+            throw ServiceError.httpError(statusCode: Int(response.code))
+        }
+        return info
     }
 
     /// Handles the repository logic to find, update, or create the device.

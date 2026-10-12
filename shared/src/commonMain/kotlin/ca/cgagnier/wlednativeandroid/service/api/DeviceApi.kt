@@ -160,5 +160,8 @@ class DeviceApiFactory(private val defaultHttpClient: HttpClient) {
     companion object {
         const val MILLIS_PER_SECOND = 1000L
         const val PING_INTERVAL_SECONDS = 30
+
+        /** Default connect/read timeout for device requests, shared by the Android and iOS clients. */
+        const val DEFAULT_TIMEOUT_SECONDS = 30L
     }
 }
