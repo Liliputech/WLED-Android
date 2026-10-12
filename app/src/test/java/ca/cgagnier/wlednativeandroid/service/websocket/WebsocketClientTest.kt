@@ -185,6 +185,46 @@ class WebsocketClientTest {
     }
 
     @Test
+    fun `handleTextFrame successfully parses DeviceStateInfo when nightlight rem overflows 32-bit int`() = runTest {
+        val client = WebsocketClient(device, httpClient, json)
+
+        var emittedStateInfo: ca.cgagnier.wlednativeandroid.model.wledapi.DeviceStateInfo? = null
+        val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            client.incomingStateInfo.collect { emittedStateInfo = it }
+        }
+
+        val overflowPayload = """
+            {
+              "state": {
+                "on": true,
+                "bri": 195,
+                "transition": 7,
+                "nl": {
+                  "on": false,
+                  "dur": 60,
+                  "mode": 1,
+                  "tbri": 0,
+                  "rem": 4294967295
+                }
+              },
+              "info": {
+                "ver": "16.0.1",
+                "name": "WLED Desk",
+                "leds": { "count": 60 },
+                "wifi": { "bssid": "aa:bb:cc:dd:ee:ff", "rssi": -65, "signal": 70, "channel": 1 }
+              }
+            }
+        """.trimIndent()
+
+        client.handleTextFrame(overflowPayload)
+        testScheduler.runCurrent()
+
+        assertNotNull(emittedStateInfo, "incomingStateInfo should emit parsed model")
+        assertEquals(4294967295L, emittedStateInfo?.state?.nightlight?.remainingTime)
+        collectJob.cancel()
+    }
+
+    @Test
     fun `handleTextFrame handles malformed, partial, and garbage JSON without throwing`() = runTest {
         val client = WebsocketClient(device, httpClient, json)
 

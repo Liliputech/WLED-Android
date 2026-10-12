@@ -134,6 +134,14 @@ class KtorDeviceApiTest {
     }
 
     @Test
+    fun postJsonDecodesStateWithOverflowNightlightRemainingTime() = runTest {
+        val payloadWithRemOverflow = SAMPLE_STATE_JSON.replace("\"rem\": -1", "\"rem\": 4294967295")
+        val state = respondingWith(payloadWithRemOverflow).api().postJson(JsonPost(isOn = true)).body
+
+        assertEquals(4294967295L, state?.nightlight?.remainingTime)
+    }
+
+    @Test
     fun postJsonReturnsErrorBodyOnHttpError() = runTest {
         val engine = respondingWith("Bad Request", HttpStatusCode.BadRequest, ContentType.Text.Plain)
 

@@ -223,4 +223,11 @@ class WledApiSerializationTest {
         )
         assertTrue(infoNullOptions.isOtaEnabled)
     }
+
+    @Test
+    fun `test Nightlight deserialization with unsigned 32-bit overflow remainingTime`() {
+        val jsonString = """{"on":false,"dur":60,"mode":1,"tbri":0,"rem":4294967295}"""
+        val nightlight = json.decodeFromString<Nightlight>(jsonString)
+        expectSelfie(nightlight.remainingTime.toString()).toBe("4294967295")
+    }
 }
