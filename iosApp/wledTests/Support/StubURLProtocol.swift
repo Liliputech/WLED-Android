@@ -35,9 +35,9 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     // MARK: - URLProtocol
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
+    override static func canInit(with request: URLRequest) -> Bool { true }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         guard let url = request.url, let stub = Self.stub(recording: request) else {
@@ -47,12 +47,15 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
         switch stub {
         case let .http(statusCode, body, contentType):
-            let response = HTTPURLResponse(
+            guard let response = HTTPURLResponse(
                 url: url,
                 statusCode: statusCode,
                 httpVersion: "HTTP/1.1",
                 headerFields: ["Content-Type": contentType]
-            )!
+            ) else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: Data(body.utf8))
             client?.urlProtocolDidFinishLoading(self)
