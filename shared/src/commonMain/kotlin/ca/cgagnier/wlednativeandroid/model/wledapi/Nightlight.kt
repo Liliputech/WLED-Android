@@ -10,5 +10,5 @@ data class Nightlight(
     @SerialName("fade") val fade: Boolean? = null,
     @SerialName("mode") val mode: Int? = null,
     @SerialName("tbri") val targetBrightness: Int? = null,
-    @SerialName("rem") val remainingTime: Int? = null,
+    @SerialName("rem") val remainingTime: Long? = null,
 )
