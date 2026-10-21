@@ -111,7 +111,7 @@ struct DeviceUpdateDetails: View {
 
 #if DEBUG
 #Preview {
-    NavigationView {
+    NavigationStack {
         DeviceUpdateDetails(
             device: PreviewData.deviceWithUpdate,
             database: PreviewData.database
