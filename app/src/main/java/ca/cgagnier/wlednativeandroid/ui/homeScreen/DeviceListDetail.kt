@@ -206,6 +206,12 @@ private fun DrawerSheetContent(
                 drawerState.close()
             }
         },
+        openSoundSync = {
+            coroutineScope.launch {
+                actions.openSoundSync()
+                drawerState.close()
+            }
+        },
         openChangelogs = {
             coroutineScope.launch {
                 actions.openChangelogs()
@@ -215,4 +221,8 @@ private fun DrawerSheetContent(
     )
 }
 
-data class DeviceListDetailActions(val openSettings: () -> Unit, val openChangelogs: () -> Unit = {})
+data class DeviceListDetailActions(
+    val openSettings: () -> Unit,
+    val openSoundSync: () -> Unit = {},
+    val openChangelogs: () -> Unit = {},
+)
