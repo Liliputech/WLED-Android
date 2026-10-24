@@ -38,6 +38,7 @@ internal fun DrawerContent(
     addDevice: () -> Unit,
     toggleShowHiddenDevices: () -> Unit,
     openSettings: () -> Unit,
+    openSoundSync: () -> Unit,
     openChangelogs: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -47,7 +48,14 @@ internal fun DrawerContent(
         modifier = Modifier.verticalScroll(scrollState),
     ) {
         DrawerHeader()
-        DrawerMainActions(addDevice, showHiddenDevices, toggleShowHiddenDevices, openSettings, openChangelogs)
+        DrawerMainActions(
+            addDevice,
+            showHiddenDevices,
+            toggleShowHiddenDevices,
+            openSettings,
+            openSoundSync,
+            openChangelogs,
+        )
         HorizontalDivider(modifier = Modifier.padding(12.dp))
         DrawerExternalLinks(uriHandler)
         Spacer(Modifier.height(24.dp))
@@ -76,6 +84,7 @@ private fun DrawerMainActions(
     showHiddenDevices: Boolean,
     toggleShowHiddenDevices: () -> Unit,
     openSettings: () -> Unit,
+    openSoundSync: () -> Unit,
     openChangelogs: () -> Unit,
 ) {
     NavigationDrawerItem(
@@ -113,6 +122,18 @@ private fun DrawerMainActions(
         },
         selected = false,
         onClick = openSettings,
+        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+    )
+    NavigationDrawerItem(
+        label = { Text(text = stringResource(R.string.sound_sync)) },
+        icon = {
+            Icon(
+                painter = painterResource(id = R.drawable.baseline_graphic_eq_24),
+                contentDescription = stringResource(R.string.sound_sync),
+            )
+        },
+        selected = false,
+        onClick = openSoundSync,
         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
     )
 }
